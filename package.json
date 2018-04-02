@@ -1,0 +1,17 @@
+{
+  "name": "06_clustering",
+  "version": "1.0.0",
+  "description": "",
+  "main": "clustering.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "arff-toolkit": "^0.1.4"
+  }
+}

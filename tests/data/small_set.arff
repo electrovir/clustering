@@ -1,0 +1,12 @@
+@relation small_set
+
+@attribute first {Red, Blue}
+@attribute second real
+@attribute third {Round, Square}
+
+@data
+?,1.0,Round
+?,2.0,Square
+Red,3.0,Round
+Red,?,?
+Red,?,Square
