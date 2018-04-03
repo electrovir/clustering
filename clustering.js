@@ -7,7 +7,7 @@ const Clustering = (() => {
     let pickedIndexes = [];
     
     while (pickedIndexes.length < k) {
-      const randomIndex = Math.round(Math.random() * size);
+      const randomIndex = Math.round(Math.random() * (size - 1));
       if (pickedIndexes.indexOf(randomIndex) === -1) {
         pickedIndexes.push(randomIndex);
       }
@@ -16,7 +16,7 @@ const Clustering = (() => {
     return pickedIndexes;
   }
 
-  function run(featureTypes, k, dataRows, initialCentroidIndexes = []) {
+  function run(featureTypes, k, dataRows, initialCentroidIndexes = [], extras = false) {
     if (!Array.isArray(featureTypes)) {
       throw new Error('Invalid featureTypes passed: ' + featureTypes);
     }
@@ -28,6 +28,9 @@ const Clustering = (() => {
     }
     if (typeof k !== 'number') {
       throw new Error('Invalid k parameter passed: ' + k);
+    }
+    if (!dataRows.every(entry => entry.length === featureTypes.length)) {
+      throw new Error('featureTypes length does not match all data lengths.');
     }
     
     let centroidIndexes = initialCentroidIndexes;
@@ -45,7 +48,7 @@ const Clustering = (() => {
     let iterations = [];
     
     while (worseIterationCount < MAX_WORST_COUNT && iterations.length < 20) {
-      const groups = groupData(centroids, dataRows, featureTypes);
+      const groups = groupData(centroids, dataRows, featureTypes, extras);
       const errors = calculateSSE(groups);
       const totalError = errors.reduce((total, error) => error + total);
       
@@ -55,6 +58,7 @@ const Clustering = (() => {
         totalError: totalError,
         centroids: JSON.parse(JSON.stringify(centroids))
       };
+      
       
       iterations.push(currentIteration);
       
@@ -69,41 +73,65 @@ const Clustering = (() => {
       centroids = calculateCentroids(groups, featureTypes);
     }
     
+    const bestClusterCounts = iterations[bestIndex].groups.map(group => group.length);
+    
     return {
-      iterations: iterations,
+      startCentroidIndexes: centroidIndexes,
       bestIndex: bestIndex,
       bestError: iterations[bestIndex].totalError,
-      bestCentroids: iterations[bestIndex].centroids
+      bestErrors: iterations[bestIndex].errors,
+      bestCentroids: iterations[bestIndex].centroids,
+      bestClusteringCounts: bestClusterCounts,
+      bestGroups: iterations[bestIndex].groups,
+      featureTypes: featureTypes,
     };
   }
 
-  function pointDistanceSquared(centroidFeatures, dataPoint, featureTypes) {
+  function pointDistanceSquared(centroidFeatures, dataPoint, featureTypes, print=false, extras = false) {
+    if (print) {
+      console.log(centroidFeatures, dataPoint, featureTypes);
+    }
     return dataPoint.reduce((sum, currentFeatureValue, featureIndex) => {
-      return sum + Math.pow(featureDistance(centroidFeatures[featureIndex], currentFeatureValue, featureTypes[featureIndex]), 2);
+      const distance = featureDistance(centroidFeatures[featureIndex], currentFeatureValue, featureTypes[featureIndex], extras);
+      if (print) {
+        console.log(String(distance) + ', ' + String(sum));
+      }
+      return sum + Math.pow(distance, 2);
     }, 0);
   }
 
-  function featureDistance(centroidFeature, dataPointFeature, featureType) {
-    if (isNaN(dataPointFeature)) {
+  function featureDistance(centroidFeature, dataPointFeature, featureType, extras = false) {
+    if (extras && isNaN(dataPointFeature) && isNaN(centroidFeature)) {
+      return 0;
+    }
+    else if (isNaN(dataPointFeature) || isNaN(centroidFeature) || typeof centroidFeature !== 'number' || typeof dataPointFeature !== 'number') {
       return 1;
     }
     else if (featureType === 'nominal') {
-      if (dataPointFeature === -1) {
+      if (extras && dataPointFeature === -1 && centroidFeature === -1) {
+        return 0;
+      }
+      if (dataPointFeature === -1 || centroidFeature === -1) {
         return 1;
       }
-      return dataPointFeature !== centroidFeature;
+      if (extras) {
+        return dataPointFeature - centroidFeature;
+      }
+      else {
+        return Number(dataPointFeature !== centroidFeature);
+      }
     }
     else {
-      return centroidFeature - dataPointFeature;
+      return dataPointFeature - centroidFeature;
     }  
   }
 
-  function groupData(centroids, data, featureTypes) {
+  function groupData(centroids, data, featureTypes, extras) {
     let initGroups = new Array(centroids.length).fill(0).map(() => []);
     
-    return data.reduce((groups, dataPoint) => {
-      const distancesSquared = centroids.map(centroidValue => {
-        return pointDistanceSquared(centroidValue, dataPoint, featureTypes);
+    return data.reduce((groups, dataPoint, dataPointIndex) => {
+      const distancesSquared = centroids.map(centroidValues => {
+        return pointDistanceSquared(centroidValues, dataPoint, featureTypes, false, extras);
       });
       
       // get minimum distance
@@ -121,7 +149,8 @@ const Clustering = (() => {
       
       const groupData = {
         data: dataPoint,
-        centroidDistanceSquared: bestCentroid.distanceSquared
+        centroidDistanceSquared: bestCentroid.distanceSquared,
+        index: dataPointIndex
       };
       
       groups[bestCentroid.index].push(groupData);
@@ -172,7 +201,7 @@ const Clustering = (() => {
           
           const summation = group.reduce((sum, entry) => {
             const value = entry.data[featureIndex];
-            if (!isNaN(value)) {
+            if (!isNaN(value) && typeof value === 'number') {
               sum += value;
               validFeatureCount++;
             }
@@ -180,6 +209,7 @@ const Clustering = (() => {
             return sum;
           }, 0);
           
+          const average = summation / validFeatureCount;
           return summation / validFeatureCount;
         }
       });
@@ -192,6 +222,7 @@ const Clustering = (() => {
     _test_groupData: groupData,
     _test_featureDistance: featureDistance,
     _test_pickInitCentroids: pickInitCentroids,
+    _test_pointDistanceSquared: pointDistanceSquared,
     
     run: run
   };
